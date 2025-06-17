@@ -31,7 +31,7 @@
 #########################################################################################
 
 # The environment value is a mandatory field, it is used for partitioning the environments, for example (PROD and NP)
-environment = "DEV"
+environment = "DEV17"
 
 # The location value is a mandatory field, it is used to control where the resources are deployed
 location = "northeurope"
