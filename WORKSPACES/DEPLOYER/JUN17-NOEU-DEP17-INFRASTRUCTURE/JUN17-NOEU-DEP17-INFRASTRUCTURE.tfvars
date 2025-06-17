@@ -243,4 +243,4 @@ application_configuration_deployment = true
 #subnets_to_add_to_firewall_for_keyvaults_and_storage=["<azure_resource_id_for_subnet>"]
 
 # The parameter 'custom_random_id' can be used to control the random 3 digits at the end of the storage accounts and key vaults
-#custom_random_id="110"
+custom_random_id="048"
