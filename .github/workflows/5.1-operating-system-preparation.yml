@@ -1,0 +1,286 @@
+---
+  # /*---------------------------------------------------------------------------8
+  # |                                                                            |
+  # |     This workflows performs the software installation                      |
+  # |                                                                            |
+  # +------------------------------------4--------------------------------------*/
+
+  name: Operating System Preparation
+  run-name: Operating System Preparation by @${{ github.actor }}
+
+  on:
+    workflow_dispatch:
+      inputs:
+        sap_system_configuration_name:
+          description: "SAP System configuration name (ENV-LOCA-VNET-SID)"
+          default: "DEV-WEEU-SAP01-X00"
+          required: true
+          type: string
+        workload_zone_name:
+          description: "Workload Environment ...)"
+          type: environment
+          required: true
+        bom_name:
+          description: "Bill of Materials name (BoM)"
+          required: true
+          type: choice
+          options:
+            - S42023SPS00_v0005ms (HANA_2_00_081)
+            - S42023SPS00_v0003ms (HANA_2_00_077)
+            - S42023SPS00_v0004ms (HANA_2_00_077 - dynamic)
+            - S42022SPS00_v0004ms (HANA_2_00_077 - dynamic)
+            - S42022SPS00_v0005ms (HANA_2_00_076)
+            - S42022SPS00_v0006ms (HANA_2_00_077)
+            - S42021ISS00_v0003ms (HANA_2_00_067)
+            - S42020ISS00_v0004ms (HANA_2_00_067 - dynamic)
+            - S42020SPS03_v0005ms (HANA_2_00_067)
+            - S41909SPS03_v0012ms (HANA_2_00_059 - dynamic)
+            - S41909ISS00_v0013ms (HANA_2_00_059)
+            - NW750SPS20_v0005ms (HANA_2_00_067)
+            - NW750SPS20_v0006ms (HANA_2_00_067 - dynamic)
+            - NW750SPS25_JAVA_v0001ms (HANA_2_00_067)
+            - NW752SPS09_v0002ms (HANA_2_00_067)
+            - NW750SPS25_JAVA__HANA_v0001ms (HANA_2_00_067)
+            - NW750SPS20_DB2_v0002ms (DB2_UDB_11_5)
+            - NW750_ORACLE_19_v0001ms (Oracle_19)
+            - NW750_ORACLE_19_v0002ms (Oracle_19 - Kernel 754)
+            - NW750_ORACLE_19_ASM_v0002ms (Oracle_19)
+            - NW750SPS25_JAVA_Oracle_19_00_v0001ms (Oracle_19)
+            - NW750SPS20_SYBASE_v0003ms (ASE_16_0_3)
+            - NW750_MSSQL_v0003ms (MSSQL_2019)
+            - SOLMAN_72SR2_JAVA_v0001ms (HANA_2_00_081)
+            - SOLMAN_72SR2_v0001ms (HANA_2_00_081)
+            - HANA_2_00_059_v0011ms
+            - HANA_2_00_067_v0006ms
+            - HANA_2_00_076_v0001ms
+            - HANA_2_00_077_v0002ms
+            - HANA_2_00_081_v0001ms
+            - DB2_UDB_11_5_v0001ms
+            - ORACLE_19_00_v0003ms
+            - ORACLE_19_00_ASM_v0001ms
+            - ORACLE_19_00_ORA_MSID_v0002ms
+            - MSSQLSRV_2019_v0001ms
+            - SYBASE_1603SP15_v0003ms
+            - XBOM_Tester
+        extra_params:
+          description: "Extra Parameters"
+          type: string
+          default: " "
+        base_os_configuration:
+          description: "Core Operating System Configuration"
+          type: boolean
+          default: true
+        sap_os_configuration:
+          description: "SAP Operating System Configuration"
+          type: boolean
+          default: true
+        bom_processing:
+          description: "Local Software Download"
+          type: boolean
+          default: true
+        post_configuration_actions:
+          description: "Post Configuration Actions"
+          type: boolean
+          default: false
+  permissions:
+    contents: write
+    id-token: write
+    issues: write
+
+  env:
+    TF_IN_AUTOMATION: true
+    TF_LOG: DEBUG
+    ANSIBLE_CORE_VERSION: '2.16'
+    TF_VERSION: '1.11.3'
+    USE_MSI: false
+
+  jobs:
+    operating_system_preparation:
+      name: Operating System Preparation
+      environment: ${{ inputs.workload_zone_name }}
+      runs-on: self-hosted
+      container:
+        image: ghcr.io/nnoaman/sap-automation:sdaf-github-actions
+      steps:
+        - name: Checkout the code
+          uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
+
+        - name: Get app token
+          id: get_workflow_token
+          uses: peter-murray/workflow-application-token-action@v3
+          with:
+            application_id: ${{ secrets.APPLICATION_ID }}
+            application_private_key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
+            #organization: ${{ github.repository_owner }}
+
+        - name: Azure Login
+          uses: Azure/Login@v2
+          with:
+            creds: '{"clientId":"${{ secrets.ARM_CLIENT_ID }}","clientSecret":"${{ secrets.ARM_CLIENT_SECRET }}","subscriptionId":"${{ secrets.ARM_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.ARM_TENANT_ID }}"}'
+
+        - name: BOM Name
+          if: ${{ github.event.inputs.bom_name != '' }}
+          id: bom
+          run:  |
+              input="${{ github.event.inputs.bom_name }}"
+              bom_base_name=$(echo "$input" | cut -d' ' -f1)
+              echo "bom_base_name=$bom_base_name" >> "$GITHUB_OUTPUT"
+
+        - name: Preparation for Ansible
+          id: preparation
+          run: |
+            cd ${SAP_AUTOMATION_REPO_PATH}
+            deploy/scripts/pipeline_scripts/v2/05-DB-and-SAP-installation-prepare.sh
+            echo "SAP_AUTOMATION_REPO_PATH=${SAP_AUTOMATION_REPO_PATH}" >> $GITHUB_ENV
+            echo "GITHUB_WORKSPACE=$GITHUB_WORKSPACE" >> $GITHUB_ENV
+          env:
+            APP_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+            APPLICATION_CONFIGURATION_NAME: ${{ vars.APPLICATION_CONFIGURATION_NAME }}
+            AZURE_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+            AZURE_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+            AZURE_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+            AZURE_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+            AZURE_OBJECT_ID: ${{ secrets.ARM_OBJECT_ID }}
+            BOM_BASE_NAME: ${{ steps.bom.outputs.bom_base_name }}
+            SAP_SYSTEM_CONFIGURATION_NAME: ${{ inputs.sap_system_configuration_name }}
+            CONTROL_PLANE_NAME: ${{ vars.CONTROL_PLANE_NAME }}
+            SCRIPT_PATH: ./sap-automation/deploy/pipelines/templates/*.sh
+            EXTRA_PARAMETERS: ${{ inputs.EXTRA_PARAMS }}
+            USE_MSI: ${{ env.USE_MSI }}
+
+        - name: Install Ansible Collections
+          run: |
+            ansible-galaxy collection install ansible.windows --force
+            ansible-galaxy collection install ansible.posix --force
+            ansible-galaxy collection install ansible.utils --force
+            ansible-galaxy collection install ansible.netcommon:5.1.2 --force
+            ansible-galaxy collection install community.windows --force
+            ansible-galaxy collection install community.general --force
+            ansible-galaxy collection install microsoft.ad --force
+
+        - name: Parameter Validation
+          uses: ./.github/actions/run-ansible
+          with:
+            displayName: "Parameter validation"
+            SAP_AUTOMATION_REPO_PATH: ${{ env.SAP_AUTOMATION_REPO_PATH }}
+            APPLICATION_CONFIGURATION_NAME: ${{ vars.APPLICATION_CONFIGURATION_NAME }}
+            CONTROL_PLANE_SUBSCRIPTION_ID: ${{ steps.preparation.outputs.CP_SUBSCRIPTION }}
+            CONTROL_PLANE_NAME: ${{ vars.CONTROL_PLANE_NAME }}
+            USE_MSI: ${{ env.USE_MSI }}
+            ansibleFilePath: "${{ env.SAP_AUTOMATION_REPO_PATH }}/deploy/ansible/playbook_00_validate_parameters.yaml"
+            ansibleConfigPath: ${{ env.SAP_AUTOMATION_REPO_PATH }}/deploy/ansible/ansible.cfg
+            secretName: ${{ steps.preparation.outputs.SSH_KEY_NAME }}
+            passwordSecretName: ${{ steps.preparation.outputs.PASSWORD_KEY_NAME }}
+            userNameSecretName: ${{ steps.preparation.outputs.USERNAME_KEY_NAME }}
+            vaultName: ${{ steps.preparation.outputs.VAULT_NAME }}
+            parametersFolder: ${{ steps.preparation.outputs.FOLDER }}
+            sapParams: "${{ env.GITHUB_WORKSPACE }}/WORKSPACES/SYSTEM/${{ inputs.sap_system_configuration_name }}/artifacts/${{ steps.preparation.outputs.SAP_PARAMETERS }}"
+            sidHosts: ${{ steps.preparation.outputs.HOSTS }}
+            extraParams: ${{ steps.preparation.outputs.NEW_PARAMETERS }}
+            azureClientId: ${{ secrets.ARM_CLIENT_ID }}
+            azureClientSecret: ${{ secrets.ARM_CLIENT_SECRET }}
+            azureTenantId: ${{ secrets.ARM_TENANT_ID }}
+            azureSubscriptionId: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+        - name: Core OS Configuration
+          if: ${{ github.event.inputs.base_os_configuration == 'true' }}
+          uses: ./.github/actions/run-ansible
+          with:
+            displayName: "Operating System Configuration"
+            SAP_AUTOMATION_REPO_PATH: ${{ env.SAP_AUTOMATION_REPO_PATH }}
+            APPLICATION_CONFIGURATION_NAME: ${{ vars.APPLICATION_CONFIGURATION_NAME }}
+            CONTROL_PLANE_SUBSCRIPTION_ID: ${{ steps.preparation.outputs.CP_SUBSCRIPTION }}
+            CONTROL_PLANE_NAME: ${{ vars.CONTROL_PLANE_NAME }}
+            USE_MSI: ${{ env.USE_MSI }}
+            ansibleFilePath: ${{ env.SAP_AUTOMATION_REPO_PATH }}/deploy/ansible/playbook_01_os_base_config.yaml
+            ansibleConfigPath: ${{ env.SAP_AUTOMATION_REPO_PATH }}/deploy/ansible/ansible.cfg
+            secretName: ${{ steps.preparation.outputs.SSH_KEY_NAME }}
+            passwordSecretName: ${{ steps.preparation.outputs.PASSWORD_KEY_NAME }}
+            userNameSecretName: ${{ steps.preparation.outputs.USERNAME_KEY_NAME }}
+            vaultName: ${{ steps.preparation.outputs.VAULT_NAME }}
+            parametersFolder: ${{ steps.preparation.outputs.FOLDER }}
+            sapParams: "${{ env.GITHUB_WORKSPACE }}/WORKSPACES/SYSTEM/${{ inputs.sap_system_configuration_name }}/artifacts/${{ steps.preparation.outputs.SAP_PARAMETERS }}"
+            sidHosts: ${{ steps.preparation.outputs.HOSTS }}
+            extraParams: ${{ steps.preparation.outputs.NEW_PARAMETERS }}
+            azureClientId: ${{ secrets.ARM_CLIENT_ID }}
+            azureClientSecret: ${{ secrets.ARM_CLIENT_SECRET }}
+            azureTenantId: ${{ secrets.ARM_TENANT_ID }}
+            azureSubscriptionId: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+        - name: SAP Specific OS Configuration
+          if: ${{ github.event.inputs.sap_os_configuration == 'true' }}
+          uses: ./.github/actions/run-ansible
+          with:
+            displayName: "SAP Specific Operating System Configuration"
+            SAP_AUTOMATION_REPO_PATH: ${{ env.SAP_AUTOMATION_REPO_PATH }}
+            APPLICATION_CONFIGURATION_NAME: ${{ vars.APPLICATION_CONFIGURATION_NAME }}
+            CONTROL_PLANE_SUBSCRIPTION_ID: ${{ steps.preparation.outputs.CP_SUBSCRIPTION }}
+            CONTROL_PLANE_NAME: ${{ vars.CONTROL_PLANE_NAME }}
+            USE_MSI: ${{ env.USE_MSI }}
+            ansibleFilePath: ${{ env.SAP_AUTOMATION_REPO_PATH }}/deploy/ansible/playbook_02_os_sap_specific_config.yaml
+            ansibleConfigPath: ${{ env.SAP_AUTOMATION_REPO_PATH }}/deploy/ansible/ansible.cfg
+            secretName: ${{ steps.preparation.outputs.SSH_KEY_NAME }}
+            passwordSecretName: ${{ steps.preparation.outputs.PASSWORD_KEY_NAME }}
+            userNameSecretName: ${{ steps.preparation.outputs.USERNAME_KEY_NAME }}
+            vaultName: ${{ steps.preparation.outputs.VAULT_NAME }}
+            parametersFolder: ${{ steps.preparation.outputs.FOLDER }}
+            sapParams: "${{ env.GITHUB_WORKSPACE }}/WORKSPACES/SYSTEM/${{ inputs.sap_system_configuration_name }}/artifacts/${{ steps.preparation.outputs.SAP_PARAMETERS }}"
+            sidHosts: ${{ steps.preparation.outputs.HOSTS }}
+            extraParams: ${{ steps.preparation.outputs.NEW_PARAMETERS }}
+            azureClientId: ${{ secrets.ARM_CLIENT_ID }}
+            azureClientSecret: ${{ secrets.ARM_CLIENT_SECRET }}
+            azureTenantId: ${{ secrets.ARM_TENANT_ID }}
+            azureSubscriptionId: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+
+        - name: SAP Software download
+          if: ${{ github.event.inputs.bom_processing == 'true' }}
+          uses: ./.github/actions/run-ansible
+          with:
+            displayName: "Software download"
+            SAP_AUTOMATION_REPO_PATH: ${{ env.SAP_AUTOMATION_REPO_PATH }}
+            APPLICATION_CONFIGURATION_NAME: ${{ vars.APPLICATION_CONFIGURATION_NAME }}
+            CONTROL_PLANE_SUBSCRIPTION_ID: ${{ steps.preparation.outputs.CP_SUBSCRIPTION }}
+            CONTROL_PLANE_NAME: ${{ vars.CONTROL_PLANE_NAME }}
+            USE_MSI: ${{ env.USE_MSI }}
+            ansibleFilePath: ${{ env.SAP_AUTOMATION_REPO_PATH }}/deploy/ansible/playbook_03_bom_processing.yaml
+            ansibleConfigPath: ${{ env.SAP_AUTOMATION_REPO_PATH }}/deploy/ansible/ansible.cfg
+            secretName: ${{ steps.preparation.outputs.SSH_KEY_NAME }}
+            passwordSecretName: ${{ steps.preparation.outputs.PASSWORD_KEY_NAME }}
+            userNameSecretName: ${{ steps.preparation.outputs.USERNAME_KEY_NAME }}
+            vaultName: ${{ steps.preparation.outputs.VAULT_NAME }}
+            parametersFolder: ${{ steps.preparation.outputs.FOLDER }}
+            sapParams: "${{ env.GITHUB_WORKSPACE }}/WORKSPACES/SYSTEM/${{ inputs.sap_system_configuration_name }}/artifacts/${{ steps.preparation.outputs.SAP_PARAMETERS }}"
+            sidHosts: ${{ steps.preparation.outputs.HOSTS }}
+            extraParams: ${{ steps.preparation.outputs.NEW_PARAMETERS }}
+            azureClientId: ${{ secrets.ARM_CLIENT_ID }}
+            azureClientSecret: ${{ secrets.ARM_CLIENT_SECRET }}
+            azureTenantId: ${{ secrets.ARM_TENANT_ID }}
+            azureSubscriptionId: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+
+        - name: Post Configuration Actions
+          if: ${{ github.event.inputs.post_configuration_actions == 'true' }}
+          uses: ./.github/actions/run-ansible
+          with:
+            displayName: "Post Configuration Actions"
+            SAP_AUTOMATION_REPO_PATH: ${{ env.SAP_AUTOMATION_REPO_PATH }}
+            APPLICATION_CONFIGURATION_NAME: ${{ vars.APPLICATION_CONFIGURATION_NAME }}
+            CONTROL_PLANE_SUBSCRIPTION_ID: ${{ steps.preparation.outputs.CP_SUBSCRIPTION }}
+            CONTROL_PLANE_NAME: ${{ vars.CONTROL_PLANE_NAME }}
+            USE_MSI: ${{ env.USE_MSI }}
+            ansibleFilePath: ${{ env.SAP_AUTOMATION_REPO_PATH }}/deploy/ansible/playbook_08_00_00_post_configuration_actions.yaml
+            ansibleConfigPath: ${{ env.SAP_AUTOMATION_REPO_PATH }}/deploy/ansible/ansible.cfg
+            secretName: ${{ steps.preparation.outputs.SSH_KEY_NAME }}
+            passwordSecretName: ${{ steps.preparation.outputs.PASSWORD_KEY_NAME }}
+            userNameSecretName: ${{ steps.preparation.outputs.USERNAME_KEY_NAME }}
+            vaultName: ${{ steps.preparation.outputs.VAULT_NAME }}
+            parametersFolder: ${{ steps.preparation.outputs.FOLDER }}
+            sapParams: "${{ env.GITHUB_WORKSPACE }}/WORKSPACES/SYSTEM/${{ inputs.sap_system_configuration_name }}/artifacts/${{ steps.preparation.outputs.SAP_PARAMETERS }}"
+            sidHosts: ${{ steps.preparation.outputs.HOSTS }}
+            extraParams: ${{ steps.preparation.outputs.NEW_PARAMETERS }}
+            azureClientId: ${{ secrets.ARM_CLIENT_ID }}
+            azureClientSecret: ${{ secrets.ARM_CLIENT_SECRET }}
+            azureTenantId: ${{ secrets.ARM_TENANT_ID }}
+            azureSubscriptionId: ${{ secrets.ARM_SUBSCRIPTION_ID }}

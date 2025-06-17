@@ -1,0 +1,115 @@
+name: Create workload environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      deployer:
+        description: "Deployer configuration name, use the following syntax: ENV-LOCA-VNET-INFRASTRUCTURE"
+        required: true
+        type: environment
+      workload_environment:
+        description: "Workload environment (DEV, QA, PRD, ...)"
+        required: true
+        type: string
+        default: TEST
+      region:
+        description: "Azure region to deploy the workload environment to. Use the short name, e.g. `westeurope`."
+        required: true
+        type: string
+        default: westeurope
+      workload_vnet:
+        description: "Workload VNet name"
+        required: true
+        type: string
+        default: SAP01
+
+permissions:
+  issues: write
+  contents: write
+  actions: write
+
+jobs:
+  create_workload_environment:
+    name: Create workload environment
+    environment: ${{ inputs.deployer }}
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/nnoaman/sap-automation:github_actions
+    steps:
+      - name: Upgrade GitHub CLI
+        run: |
+          echo "Checking current gh version..."
+          gh --version
+          echo "Upgrading GitHub CLI..."
+          type -p yum-config-manager >/dev/null || sudo yum install -y yum-utils
+          sudo yum-config-manager --add-repo https://cli.github.com/packages/rpm/gh-cli.repo
+          sudo yum update -y gh
+          echo "Updated gh version:"
+          gh --version
+
+      - name: Get app token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@v3
+        with:
+          application_id: ${{ secrets.APPLICATION_ID }}
+          application_private_key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
+          #organization: ${{ github.repository_owner }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.get_workflow_token.outputs.token }}
+
+      - name: Create GitHub Workload Environment
+        env:
+          GH_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+        run: |
+          environment=${{ inputs.workload_environment }}
+          region=${{ inputs.region }}
+          workload_vnet=${{ inputs.workload_vnet }}
+
+          pushd /source/deploy/terraform/terraform-units/modules/sap_namegenerator
+          region_map=$(echo var.region_mapping.${region} | terraform console | tr -d '"')
+          popd
+
+          workload_config_name=${environment}-${region_map}-${workload_vnet}-INFRASTRUCTURE
+          url_to_call=/repos/${{ github.repository }}/environments/${workload_config_name^^}
+
+          echo "Creating environment: ${workload_config_name^^}"
+          _=$(gh api \
+            -X PUT \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            ${url_to_call})
+
+          # Add WORKSPACES file
+          mkdir -p WORKSPACES/LANDSCAPE/${workload_config_name^^}
+
+          cat .cfg_template/landscape.tfvars \
+            | sed "s|@@ENV@@|${environment}|g" \
+            | sed "s|@@REGION@@|${region}|g" \
+            | sed "s|@@VNET@@|${workload_vnet}|g" \
+            > WORKSPACES/LANDSCAPE/${workload_config_name^^}/${workload_config_name^^}.tfvars
+
+          git config --global --add safe.directory ${GITHUB_WORKSPACE}
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "sap-automation-deployer@noreply.github.com"
+
+          git add WORKSPACES
+          git commit -m "Add WORKSPACES for ${workload_config_name^^}"
+          git push
+
+          # Set secrets
+          gh secret set CP_ARM_CLIENT_ID --body "${{ secrets.AZURE_CLIENT_ID }}" --env ${workload_config_name}
+          gh secret set CP_ARM_CLIENT_SECRET --body "${{ secrets.AZURE_CLIENT_SECRET }}" --env ${workload_config_name}
+          gh secret set CP_ARM_SUBSCRIPTION_ID --body "${{ secrets.AZURE_SUBSCRIPTION_ID }}" --env ${workload_config_name}
+          gh secret set CP_ARM_TENANT_ID --body "${{ secrets.AZURE_TENANT_ID }}" --env ${workload_config_name}
+          gh secret set WL_ARM_CLIENT_ID --body "${{ secrets.AZURE_CLIENT_ID }}" --env ${workload_config_name}
+          gh secret set WL_ARM_CLIENT_SECRET --body "${{ secrets.AZURE_CLIENT_SECRET }}" --env ${workload_config_name}
+          gh secret set WL_ARM_SUBSCRIPTION_ID --body "${{ secrets.AZURE_SUBSCRIPTION_ID }}" --env ${workload_config_name}
+          gh secret set WL_ARM_TENANT_ID --body "${{ secrets.AZURE_TENANT_ID }}" --env ${workload_config_name}
+          gh secret set WL_ARM_OBJECT_ID --body "${{ secrets.AZURE_OBJECT_ID }}" --env ${workload_config_name}
+
+          # Set variables
+          gh variable set APP_CONFIGURATION_RESOURCE_GROUP --body "${{ vars.APP_CONFIGURATION_RESOURCE_GROUP }}" --env ${workload_config_name}
+          gh variable set APP_CONFIGURATION_NAME --body "${{ vars.APP_CONFIGURATION_NAME }}" --env ${workload_config_name}

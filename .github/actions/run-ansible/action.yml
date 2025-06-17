@@ -1,0 +1,102 @@
+name: 'Run Ansible Playbook for SAP'
+description: 'Executes Ansible playbooks for SAP automation'
+
+inputs:
+  displayName:
+    description: 'Display name for the step'
+    required: true
+  SAP_AUTOMATION_REPO_PATH:
+    description: 'Path to the SAP automation repository'
+    required: true
+  ansibleFilePath:
+    description: 'Path to the Ansible playbook file'
+    required: true
+  ansibleConfigPath:
+    description: 'Path to the Ansible configuration file'
+    required: true
+  sidHosts:
+    description: 'Path to hosts inventory file'
+    required: true
+  secretName:
+    description: 'SSH key secret name in Key Vault'
+    required: true
+  vaultName:
+    description: 'Azure Key Vault name'
+    required: true
+  parametersFolder:
+    description: 'Path to parameters folder'
+    required: true
+  extraParams:
+    description: 'Extra parameters to pass to Ansible'
+    required: false
+    default: ''
+  sapParams:
+    description: 'SAP parameters file path'
+    required: true
+  passwordSecretName:
+    description: 'Password secret name in Key Vault'
+    required: true
+  userNameSecretName:
+    description: 'Username secret name in Key Vault'
+    required: true
+  azureClientId:
+    description: 'Azure Client ID'
+    required: true
+  azureClientSecret:
+    description: 'Azure Client Secret'
+    required: true
+  azureTenantId:
+    description: 'Azure Tenant ID'
+    required: true
+  azureSubscriptionId:
+    description: 'Azure Subscription ID'
+    required: true
+  USE_MSI:
+    description: 'Use Managed Service Identity'
+    required: false
+    default: 'false'
+  CONTROL_PLANE_SUBSCRIPTION_ID:
+    description: 'Control plane subscription ID'
+    required: true
+    default: ''
+  CONTROL_PLANE_NAME:
+    description: 'Control plane name'
+    required: true
+    default: ''
+  APPLICATION_CONFIGURATION_NAME:
+    description: 'Application configuration name'
+    required: true
+    default: ''
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run Ansible Playbook
+      shell: bash
+      run: |
+        cd ${{ inputs.SAP_AUTOMATION_REPO_PATH }}
+        deploy/scripts/pipeline_scripts/05-run-ansible.sh
+      env:
+        AZURE_CLIENT_ID: ${{ inputs.azureClientId }}
+        AZURE_CLIENT_SECRET: ${{ inputs.azureClientSecret }}
+        AZURE_TENANT_ID: ${{ inputs.azureTenantId }}
+        AZURE_SUBSCRIPTION_ID: ${{ inputs.azureSubscriptionId }}
+        USE_MSI: ${{ inputs.USE_MSI }}
+        ANSIBLE_COLLECTIONS_PATH: ~/.ansible/collections:/opt/ansible/collections
+        ANSIBLE_PYTHON_INTERPRETER: auto_silent
+        ANSIBLE_DISPLAY_SKIPPED_HOSTS: false
+        ANSIBLE_HOST_KEY_CHECKING: false
+        ANSIBLE_FILE_PATH: ${{ inputs.ansibleFilePath }}
+        ANSIBLE_CONFIG: ${{ inputs.ansibleConfigPath }}
+        PARAMETERS_FOLDER: ${{ inputs.parametersFolder }}
+        AGENT_TEMPDIRECTORY: /tmp
+        EXTRA_PARAMS: ${{ inputs.extraParams }}
+        SAP_PARAMS: ${{ inputs.sapParams }}
+        INVENTORY: ${{ inputs.parametersFolder }}/${{ inputs.sidHosts }}
+        SSH_KEY_NAME: ${{ inputs.secretName }}
+        VAULT_NAME: ${{ inputs.vaultName }}
+        PASSWORD_KEY_NAME: ${{ inputs.passwordSecretName }}
+        USERNAME_KEY_NAME: ${{ inputs.userNameSecretName }}
+        CONTROL_PLANE_SUBSCRIPTION_ID: ${{ inputs.CONTROL_PLANE_SUBSCRIPTION_ID }}
+        CONTROL_PLANE_NAME: ${{ inputs.CONTROL_PLANE_NAME }}
+        APPLICATION_CONFIGURATION_NAME: ${{ inputs.APPLICATION_CONFIGURATION_NAME }}

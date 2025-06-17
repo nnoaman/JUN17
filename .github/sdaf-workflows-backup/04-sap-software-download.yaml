@@ -1,0 +1,119 @@
+# /*---------------------------------------------------------------------------8
+# |                                                                            |
+# |     This workflows deploys the SAP Workload Zone with GitHub Actions       |
+# |                                                                            |
+# +------------------------------------4--------------------------------------*/
+
+name: Download SAP software
+run-name: Download SAP software @${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      bom_base_name:
+        description: "Name of Bill of Materials (BoM)"
+        required: true
+        type: choice
+        options:
+          - S42023SPS00_v0005ms (HANA_2_00_081)
+          - S42023SPS00_v0003ms (HANA_2_00_077)
+          - S42023SPS00_v0004ms (HANA_2_00_077 - dynamic)
+          - S42022SPS00_v0004ms (HANA_2_00_077 - dynamic)
+          - S42022SPS00_v0005ms (HANA_2_00_076)
+          - S42022SPS00_v0006ms (HANA_2_00_077)
+          - S42021ISS00_v0003ms (HANA_2_00_067)
+          - S42020ISS00_v0004ms (HANA_2_00_067 - dynamic)
+          - S42020SPS03_v0005ms (HANA_2_00_067)
+          - S41909SPS03_v0012ms (HANA_2_00_059 - dynamic)
+          - S41909ISS00_v0013ms (HANA_2_00_059)
+          - NW750SPS20_v0005ms (HANA_2_00_067)
+          - NW750SPS20_v0006ms (HANA_2_00_067 - dynamic)
+          - NW750SPS25_JAVA_v0001ms (HANA_2_00_067)
+          - NW752SPS09_v0002ms (HANA_2_00_067)
+          - NW750SPS25_JAVA__HANA_v0001ms (HANA_2_00_067)
+          - NW750SPS20_DB2_v0002ms (DB2_UDB_11_5)
+          - NW750_ORACLE_19_v0001ms (Oracle_19)
+          - NW750_ORACLE_19_v0002ms (Oracle_19 - Kernel 754)
+          - NW750_ORACLE_19_ASM_v0002ms (Oracle_19)
+          - NW750SPS25_JAVA_Oracle_19_00_v0001ms (Oracle_19)
+          - NW750SPS20_SYBASE_v0003ms (ASE_16_0_3)
+          - NW750_MSSQL_v0003ms (MSSQL_2019)
+          - SOLMAN_72SR2_JAVA_v0001ms (HANA_2_00_081)
+          - SOLMAN_72SR2_v0001ms (HANA_2_00_081)
+          - HANA_2_00_059_v0011ms
+          - HANA_2_00_067_v0006ms
+          - HANA_2_00_076_v0001ms
+          - HANA_2_00_077_v0002ms
+          - HANA_2_00_081_v0001ms
+          - DB2_UDB_11_5_v0001ms
+          - ORACLE_19_00_v0003ms
+          - ORACLE_19_00_ASM_v0001ms
+          - ORACLE_19_00_ORA_MSID_v0002ms
+          - MSSQLSRV_2019_v0001ms
+          - SYBASE_1603SP15_v0003ms
+          - XBOM_Tester
+
+      deployer:
+        description: "Control Plane Environment"
+        required: true
+        type: environment
+      region:
+        description: "Control Plane Region"
+        required: true
+        type: string
+        default: westeurope
+      re_download:
+        description: "Re-download"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+  issues: write
+
+jobs:
+  prepare_download:
+    name: Prepare Download
+    environment: ${{ inputs.deployer }}
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/nnoaman/sap-automation:github_actions
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get app token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@v3
+        with:
+          application_id: ${{ secrets.APPLICATION_ID }}
+          application_private_key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
+          #organization: ${{ github.repository_owner }}
+
+      - name: Azure Login
+        uses: Azure/Login@v2
+        with:
+          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
+
+      - name: Prepare SAP software download
+        run: |
+          cd ${SAP_AUTOMATION_REPO_PATH}
+          deploy/automation/04-sap-software-download/01-sap-software-download-prepare.sh
+        env:
+          APP_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+          bom_base_name: ${{ inputs.bom_base_name }}
+          region: ${{ inputs.region }}
+          environment: ${{ inputs.deployer }}
+          re_download: ${{ inputs.re_download }}
+          ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          SUsername: ${{ secrets.S_USERNAME }}
+          SPassword: ${{ secrets.S_PASSWORD }}
+          USE_MSI: false
+          deployerconfig: ${{ inputs.deployer }}.tfvars
+          deployerfolder: ${{ inputs.deployer }}

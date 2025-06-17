@@ -1,0 +1,156 @@
+# /*---------------------------------------------------------------------------8
+# |                                                                            |
+# |     This workflows deploys the SAP Workload Zone with GitHub Actions       |
+# |                                                                            |
+# +------------------------------------4--------------------------------------*/
+
+name: Deploy SAP Workload Zone
+run-name: Deploy SAP Workload Zone by @${{ github.actor }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      control_plane_name:
+        description: "Control Plane Name configuration name, use the following syntax: ENV-LOCA-VNET"
+        required: true
+        type: environment
+      workload_zone:
+        description: "Workload zone configuration name, use the following syntax: ENV-LOCA-VNET"
+        required: true
+        type: environment
+      inherit_settings:
+        description: "Inherit Terraform state file information from control plane"
+        type: boolean
+        default: true
+      test:
+        description: "Test the deployment without actually deploying the resources"
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  id-token: write
+  issues: write
+
+env:
+  TF_IN_AUTOMATION: true
+  TF_LOG: DEBUG
+  ANSIBLE_CORE_VERSION: '2.16'
+  TF_VERSION: '1.11.3'
+  USE_MSI: false
+
+jobs:
+  populate-keyvault:
+    name: Save Deployment Credentials in Azure Keyvault
+    environment: ${{ inputs.workload_zone }}
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/nnoaman/sap-automation:sdaf-github-actions
+    steps:
+      - name: Configure Git Safe Directory
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "/__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}"
+      - name: Checkout the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get app token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@v4
+        with:
+          application_id: ${{ secrets.APPLICATION_ID }}
+          application_private_key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
+          #organization: ${{ github.repository_owner }}
+
+      - name: Azure Login with Service Principal
+        if: ${{ vars.USE_MSI != 'true' }}
+        uses: Azure/Login@v2
+        with:
+          creds: '{"clientId":"${{ secrets.ARM_CLIENT_ID }}","clientSecret":"${{ secrets.ARM_CLIENT_SECRET }}","subscriptionId":"${{ secrets.ARM_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.ARM_TENANT_ID }}"}'
+
+      - name: Parameter Validation
+        id: parameter_validation
+        run: |
+          cd ${SAP_AUTOMATION_REPO_PATH}
+          bash deploy/scripts/pipeline_scripts/v2/00-store-secrets-in-keyvault.sh
+        env:
+          APPLICATION_CONFIGURATION_NAME: ${{ vars.APPLICATION_CONFIGURATION_NAME }}
+          APP_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+          ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          CONTROL_PLANE_NAME: ${{ inputs.control_plane_name }}
+          DEPLOYER_KEYVAULT: ${{ vars.DEPLOYER_KEYVAULT }}
+          OBJECT_ID: ${{ secrets.ARM_OBJECT_ID }}
+          TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+          TF_VAR_agent_pool: 'Default'
+          TF_VAR_ansible_core_version: ${{ env.ANSIBLE_CORE_VERSION }}
+          TF_VAR_app_registration_app_id: ${{ secrets.APP_REGISTRATION_APP_ID }}
+          TF_VAR_tf_version: ${{ env.TF_VERSION }}
+          TF_VAR_APP_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+          USE_MSI: ${{ env.USE_MSI }}
+          ZONE: ${{ inputs.control_plane_name }}
+
+  deploy_sap_workload_zone:
+    name: Deploy SAP Workload Zone
+    environment: ${{ inputs.workload_zone }}
+    needs: populate-keyvault
+    runs-on: self-hosted
+    container:
+      image: ghcr.io/nnoaman/sap-automation:sdaf-github-actions
+    steps:
+      - name: Checkout the code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure Git Safe Directory
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "/__w/${{ github.event.repository.name }}/${{ github.event.repository.name }}"
+
+      - name: Get app token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@v3
+        with:
+          application_id: ${{ secrets.APPLICATION_ID }}
+          application_private_key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
+          #organization: ${{ github.repository_owner }}
+
+      - name: Azure Login with Service Principal
+        if: ${{ vars.USE_MSI != 'true' }}
+        uses: Azure/Login@v2
+        with:
+          creds: '{"clientId":"${{ secrets.ARM_CLIENT_ID }}","clientSecret":"${{ secrets.ARM_CLIENT_SECRET }}","subscriptionId":"${{ secrets.ARM_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.ARM_TENANT_ID }}"}'
+
+      - name: Deploy SAP Workload Zone
+        run: |
+          cd ${SAP_AUTOMATION_REPO_PATH}
+          deploy/scripts/pipeline_scripts/v2/02-sap-workload-zone.sh
+        env:
+          APPLICATION_CONFIGURATION_NAME: ${{ vars.APPLICATION_CONFIGURATION_NAME }}
+          APP_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+          CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+          CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+          CONTROL_PLANE_NAME: ${{ inputs.control_plane_name }}
+          WORKLOAD_ZONE_NAME: ${{ inputs.workload_zone }}
+          DEPLOYER_KEYVAULT: ${{ vars.DEPLOYER_KEYVAULT }}
+          APP_REGISTRATION_APP_ID: ${{ secrets.APP_REGISTRATION_APP_ID }}
+          DEPLOYER_TFSTATE_KEY: "${{ inputs.control_plane_name }}-INFRASTRUCTURE.terraform.tfstate"
+          IS_PIPELINE_DEPLOYMENT: true
+          OBJECT_ID: ${{ secrets.ARM_OBJECT_ID }}
+          ARM_SUBSCRIPTION_ID: "${{ secrets.ARM_SUBSCRIPTION_ID }}"
+          TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+          TF_VAR_tf_version: ${{ env.TF_VERSION }}
+          TF_VAR_agent_pool: 'Default'
+          TF_VAR_ansible_core_version: ${{ env.ANSIBLE_CORE_VERSION }}
+          TF_VAR_app_registration_app_id: ${{ secrets.APP_REGISTRATION_APP_ID }}
+          TF_VAR_subscription_id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+          TF_VAR_APP_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+          tf_version: ${{ env.TF_VERSION }}
+          TF_VAR_use_spn: ${{ env.USE_MSI }}
+          USE_MSI: ${{ env.USE_MSI }}
+          TEST_ONLY: ${{ inputs.test }}

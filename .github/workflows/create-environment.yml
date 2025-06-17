@@ -1,0 +1,101 @@
+name: Create environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment name"
+        required: true
+        default: "MGMT"
+      region:
+        description: "Deployment region"
+        required: true
+        default: "westeurope"
+      deployer_vnet:
+        description: "Deployer VNet"
+        required: true
+        default: "DEP01"
+
+permissions:
+  issues: write
+  contents: write
+  actions: write
+
+jobs:
+  create_environment:
+    name: Create environment
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/nnoaman/sap-automation:github_actions
+    steps:
+      - name: Get app token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@v3
+        with:
+          application_id: ${{ secrets.APPLICATION_ID }}
+          application_private_key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
+          #organization: ${{ github.repository_owner }}
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          token: ${{ steps.get_workflow_token.outputs.token }}
+
+      - name: Create GitHub Environment
+        env:
+          GH_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+        run: |
+          environment=${{ github.event.inputs.environment }}
+          region=${{ github.event.inputs.region }}
+          deployer_vnet=${{ github.event.inputs.deployer_vnet }}
+
+          pushd /source/deploy/terraform/terraform-units/modules/sap_namegenerator
+          region_map=$(echo var.region_mapping.${region} | terraform console | tr -d '"')
+          popd
+
+          echo region_map: $region_map
+          echo region: $region
+
+          environment_name=${environment}-${region_map}-${deployer_vnet}
+          deployer_name=${environment}-${region_map}-${deployer_vnet}-INFRASTRUCTURE
+          library_name=${environment}-${region_map}-SAP_LIBRARY
+
+          url_to_call=/repos/${{ github.repository }}/environments/${environment_name^^}
+
+          _=$(gh api \
+            -X PUT \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            ${url_to_call})
+
+          mkdir -p WORKSPACES/DEPLOYER/${deployer_name^^}
+          mkdir -p WORKSPACES/LIBRARY/${library_name^^}
+
+          cat .cfg_template/deployer.tfvars \
+            | sed "s|@@ENV@@|${environment}|g" \
+            | sed "s|@@REGION@@|${region}|g" \
+            | sed "s|@@VNET@@|${deployer_vnet}|g" \
+            | sed "s|@@REGION_DISPLAY_NAME@@|${region}|g" \
+            > WORKSPACES/DEPLOYER/${deployer_name^^}/${deployer_name^^}.tfvars
+
+          cat .cfg_template/library.tfvars \
+            | sed "s|@@ENV@@|${environment}|g" \
+            | sed "s|@@REGION@@|${region}|g" \
+            > WORKSPACES/LIBRARY/${library_name^^}/${library_name^^}.tfvars
+
+          # Update the environment in the issue-closed workflow
+          # workspace=$(ls ${GITHUB_WORKSPACE}/WORKSPACES|tail -n 1)
+          # yq -i '.jobs.link-azure.environment = "'${deployer_name^^}'"' .github/workflows/issue-closed.yaml
+
+          git config --global --add safe.directory ${GITHUB_WORKSPACE}
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "sap-automation-deployer@noreply.github.com"
+
+          git add WORKSPACES
+          #git add .github/workflows/issue-closed.yaml
+
+          git commit -m "Add configuration for ${environment} in ${region}"
+          git push
+
+          # # Now update the deployment workflow with the deployer and library
+          # .github/workflows/scripts/update-workflow-on-workspaces-changes.sh
