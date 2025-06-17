@@ -1,0 +1,107 @@
+SHA_DB:
+  hosts:
+    shadhdb00l030:
+      ansible_host        : 10.110.96.7
+      remote_user         : azureadm
+      ansible_connection  : ssh
+      connection_type     : key
+      virtual_host        : shadhdb00l030
+      become_user         : root
+      os_type             : linux
+      vm_name             : DEV17-NOEU-SAP01-SHA_shadhdb_z2_00l0301
+      resource_group_name : DEV17-NOEU-SAP01-SHA
+      subscription_id     : d6c8e3b6-467e-452e-97c9-49d9de9e37da
+
+    shadhdb00l130:
+      ansible_host        : 10.110.96.6
+      remote_user         : azureadm
+      ansible_connection  : ssh
+      connection_type     : key
+      virtual_host        : shadhdb00l130
+      become_user         : root
+      os_type             : linux
+      vm_name             : DEV17-NOEU-SAP01-SHA_shadhdb_z2_00l1301
+      resource_group_name : DEV17-NOEU-SAP01-SHA
+      subscription_id     : d6c8e3b6-467e-452e-97c9-49d9de9e37da
+
+  vars:
+    node_tier             : hana
+    supported_tiers       : [hana]
+
+SHA_SCS:
+  hosts:
+    shascs00l301:
+      ansible_host        : 10.110.32.10
+      remote_user         : azureadm
+      ansible_connection  : ssh
+      connection_type     : key
+      virtual_host        : shascs00l301
+      become_user         : root
+      os_type             : linux
+      vm_name             : DEV17-NOEU-SAP01-SHA_shascs_z2_00l301
+      resource_group_name : DEV17-NOEU-SAP01-SHA
+      subscription_id     : d6c8e3b6-467e-452e-97c9-49d9de9e37da
+
+  vars:
+    node_tier             : scs
+    supported_tiers       : [scs]
+
+SHA_ERS:
+  hosts:
+    shascs01l301:
+      ansible_host        : 10.110.32.9
+      remote_user         : azureadm
+      ansible_connection  : ssh
+      connection_type     : key
+      virtual_host        : shascs01l301
+      become_user         : root
+      os_type             : linux
+      vm_name             : DEV17-NOEU-SAP01-SHA_shascs_z2_01l301
+      resource_group_name : DEV17-NOEU-SAP01-SHA
+      subscription_id     : d6c8e3b6-467e-452e-97c9-49d9de9e37da
+
+  vars:
+    node_tier             : ers
+    supported_tiers       : [ers]
+
+SHA_PAS:
+  hosts:
+    shaapp00l301:
+      ansible_host        : 10.110.32.11
+      remote_user         : azureadm
+      ansible_connection  : ssh
+      connection_type     : key
+      virtual_host        : shaapp00l301
+      become_user         : root
+      os_type             : linux
+      vm_name             : DEV17-NOEU-SAP01-SHA_shaapp_z2_00l301
+      resource_group_name : DEV17-NOEU-SAP01-SHA
+      subscription_id     : d6c8e3b6-467e-452e-97c9-49d9de9e37da
+
+  vars:
+    node_tier             : pas
+    supported_tiers       : [pas]
+
+SHA_APP:
+  hosts:
+  vars:
+    node_tier             : app
+    supported_tiers       : [app]
+
+SHA_WEB:
+  hosts:
+  vars:
+    node_tier             : web
+    supported_tiers       : [web]
+
+SHA_OBSERVER_DB:
+  hosts:
+  vars:
+    node_tier             : observer
+    supported_tiers       : [observer]
+
+SHA_ISCSI:
+  hosts:
+  vars:
+    node_tier             : iscsi
+    supported_tiers       : [iscsi]
