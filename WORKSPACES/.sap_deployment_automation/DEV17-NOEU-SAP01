@@ -1,0 +1,4 @@
+landscape_tfstate_key_exists=false
+deployer_tfstate_key=JUN17-NOEU-DEP17-INFRASTRUCTURE.terraform.tfstate
+APPLICATION_CONFIGURATION_ID=/subscriptions/d6c8e3b6-467e-452e-97c9-49d9de9e37da/resourceGroups/JUN17-NOEU-DEP17-INFRASTRUCTURE/providers/Microsoft.AppConfiguration/configurationStores/jun17noeuapc048
+CONTROL_PLANE_NAME=JUN17-NOEU-DEP17
