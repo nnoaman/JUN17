@@ -33,7 +33,7 @@ location="northeurope"
 network_logical_name="SAP01"
 
 # network_address_space is a mandatory parameter when an existing virtual network is not used
-network_address_space="10.110.0.0/16"
+network_address_space=["10.110.0.0/16"]
 
 # admin_subnet_address_prefix is a mandatory parameter if the subnets are not defined in the workload or if existing subnets are not used
 admin_subnet_address_prefix="10.110.0.0/19"
