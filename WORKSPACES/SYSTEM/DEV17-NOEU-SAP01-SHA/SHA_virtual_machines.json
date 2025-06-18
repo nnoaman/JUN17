@@ -1,0 +1,4 @@
+{
+    "configurationType": "Discovery",
+    "centralServerVmId": "/subscriptions/d6c8e3b6-467e-452e-97c9-49d9de9e37da/resourceGroups/DEV17-NOEU-SAP01-SHA/providers/Microsoft.Compute/virtualMachines/DEV17-NOEU-SAP01-SHA_shascs_z2_00l301"
+}
