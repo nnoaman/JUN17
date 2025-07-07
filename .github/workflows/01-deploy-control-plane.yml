@@ -64,12 +64,17 @@ jobs:
           application_private_key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
           #organization: ${{ github.repository_owner }}
 
-      - name: Azure Login with Service Principal
-        if: ${{ vars.USE_MSI != 'true' }}
-        uses: Azure/Login@v2
+      - name:                                Azure Login with Service Principal
+        if:                                  ${{ vars.USE_MSI != 'true' }}
+        uses:                                Azure/Login@v2
         with:
-          creds: '{"clientId":"${{ secrets.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ secrets.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ secrets.AZURE_TENANT_ID }}"}'
-
+          creds:                             |
+           {
+                                             "clientId": "${{ vars.ARM_CLIENT_ID }}",
+                                             "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+                                             "subscriptionId": "${{ vars.ARM_SUBSCRIPTION_ID }}",
+                                             "tenantId": "${{ vars.ARM_TENANT_ID }}"
+           }
       - name: Prepare Control Plane
         id: prepare_control_plane
         run: |
